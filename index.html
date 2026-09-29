@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Assignment Dashboard</title>
+<style>
+  :root {
+    --bg: #f5f7fb;
+    --card: #ffffff;
+    --text: #182230;
+    --muted: #667085;
+    --border: #d9dee8;
+    --primary: #315efb;
+    --primary-dark: #2348d1;
+    --danger: #c93636;
+    --warning: #b26a00;
+    --success: #157347;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: Inter, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+  .app { max-width: 1180px; margin: 0 auto; padding: 28px 18px 50px; }
+  h1 { margin: 0 0 6px; font-size: 30px; }
+  .subtitle { color: var(--muted); margin-bottom: 22px; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 18px;
+    margin-bottom: 16px;
+    box-shadow: 0 2px 8px rgba(16,24,40,.04);
+  }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  input, select, button {
+    font: inherit;
+    border-radius: 9px;
+    border: 1px solid var(--border);
+    padding: 10px 12px;
+  }
+  input { flex: 1; min-width: 250px; }
+  select { background: white; }
+  button {
+    cursor: pointer;
+    background: white;
+    font-weight: 600;
+  }
+  button.primary { background: var(--primary); color: white; border-color: var(--primary); }
+  button.primary:hover { background: var(--primary-dark); }
+  button.danger { color: var(--danger); }
+  button.small { padding: 7px 9px; font-size: 13px; }
+  .message { margin-top: 10px; color: var(--muted); min-height: 20px; }
+  .message.error { color: var(--danger); }
+  .message.success { color: var(--success); }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .stat { padding: 15px; border: 1px solid var(--border); border-radius: 12px; }
+  .stat strong { display: block; font-size: 25px; margin-top: 3px; }
+  .stat span { color: var(--muted); font-size: 13px; }
+  .toolbar { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+  .toolbar input { min-width: 220px; }
+  .course { margin-top: 20px; }
+  .course h2 { font-size: 18px; margin: 0 0 8px; }
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; min-width: 760px; }
+  th, td { text-align: left; padding: 11px 9px; border-bottom: 1px solid #edf0f4; vertical-align: middle; }
+  th { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  .assignment-name { font-weight: 650; }
+  .date { white-space: nowrap; }
+  .overdue { color: var(--danger); font-weight: 700; }
+  .soon { color: var(--warning); font-weight: 700; }
+  .done { text-decoration: line-through; color: var(--muted); }
+  .empty { color: var(--muted); text-align: center; padding: 35px 10px; }
+  .review-list { max-height: 350px; overflow: auto; margin-top: 12px; border: 1px solid var(--border); border-radius: 10px; }
+  .review-item { display: flex; gap: 10px; padding: 10px 12px; border-bottom: 1px solid #edf0f4; align-items: flex-start; }
+  .review-item:last-child { border-bottom: 0; }
+  .review-meta { flex: 1; }
+  .review-meta strong { display: block; }
+  .review-meta span { color: var(--muted); font-size: 13px; }
+  .hidden { display: none !important; }
+  .help { font-size: 13px; color: var(--muted); line-height: 1.5; }
+  .sync-info { font-size: 13px; color: var(--muted); }
+  @media (max-width: 720px) {
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    h1 { font-size: 25px; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <h1>Assignment Dashboard</h1>
+  <div class="subtitle">Import assignments from an ICS calendar and keep them organized.</div>
+
+  <div class="card">
+    <strong>Calendar Sync</strong>
+    <div class="row" style="margin-top:10px;">
+      <input id="icsUrl" type="url" placeholder="Paste your Canvas / school ICS calendar URL">
+      <button class="primary" id="syncBtn">Sync Calendar</button>
+      <button id="clearBtn">Clear Saved Data</button>
+    </div>
+    <div id="message" class="message"></div>
+    <div class="sync-info" id="syncInfo"></div>
+    <p class="help">
+      Your browser must be allowed to request the ICS URL directly. If your school blocks
+      cross-origin requests (CORS), use the optional backend/proxy described below the dashboard.
+      Your imported assignments are stored in this browser with localStorage.
+    </p>
+  </div>
+
+  <div class="card">
+    <div class="stats">
+      <div class="stat"><span>Total</span><strong id="totalCount">0</strong></div>
+      <div class="stat"><span>Due Soon</span><strong id="soonCount">0</strong></div>
+      <div class="stat"><span>Overdue</span><strong id="overdueCount">0</strong></div>
+      <div class="stat"><span>Completed</span><strong id="completedCount">0</strong></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="toolbar">
+      <input id="search" placeholder="Search assignments...">
+      <select id="courseFilter"><option value="all">All courses</option></select>
+      <select id="statusFilter">
+        <option value="all">All statuses</option>
+        <option value="not-started">Not Started</option>
+        <option value="in-progress">In Progress</option>
+        <option value="completed">Completed</option>
+      </select>
+      <select id="dateFilter">
+        <option value="all">All dates</option>
+        <option value="upcoming">Upcoming</option>
+        <option value="soon">Due within 7 days</option>
+        <option value="overdue">Overdue</option>
+      </select>
+    </div>
+    <div id="assignmentContainer"></div>
+  </div>
+
+  <div class="card hidden" id="reviewCard">
+    <strong>New Calendar Events</strong>
+    <div class="help" style="margin-top:5px;">
+      Review what the importer found. Events that look like assignments are selected automatically.
+    </div>
+    <div id="reviewList" class="review-list"></div>
+    <div class="row" style="margin-top:12px;">
+      <button class="primary" id="importSelectedBtn">Import Selected</button>
+      <button id="cancelReviewBtn">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  const STORAGE_KEY = "assignment-dashboard-v1";
+  const URL_KEY = "assignment-dashboard-ics-url";
+  let assignments = loadAssignments();
+  let pendingEvents = [];
+
+  const $ = id => document.getElementById(id);
+
+  function loadAssignments() {
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]"); }
+    catch { return []; }
+  }
+
+  function saveAssignments() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(assignments));
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? "").replace(/[&<>"']/g, c => ({
+      "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#039;"
+    }[c]));
+  }
+
+  function unescapeIcs(text) {
+    return text
+      .replace(/\\\\/g, "\\")
+      .replace(/\\n/g, "\n")
+      .replace(/\\N/g, "\n")
+      .replace(/\\,/g, ",")
+      .replace(/\\;/g, ";")
+      .replace(/\\:/g, ":");
+  }
+
+  function unfoldIcs(text) {
+    return text.replace(/\r?\n[ \t]/g, "");
+  }
+
+  function parseIcsDate(value) {
+    if (!value) return null;
+    value = value.trim();
+
+    // YYYYMMDD for all-day event
+    if (/^\\d{8}$/.test(value)) {
+      return new Date(
+        Number(value.slice(0,4)),
+        Number(value.slice(4,6)) - 1,
+        Number(value.slice(6,8)),
+        23, 59, 59
+      );
+    }
+
+    // YYYYMMDDTHHMMSSZ or local time
+    const m = value.match(/^(\\d{4})(\\d{2})(\\d{2})T(\\d{2})(\\d{2})(\\d{2})(Z)?$/);
+    if (!m) return null;
+
+    if (m[7]) return new Date(Date.UTC(
+      +m[1], +m[2]-1, +m[3], +m[4], +m[5], +m[6]
+    ));
+
+    return new Date(
+      +m[1], +m[2]-1, +m[3], +m[4], +m[5], +m[6]
+    );
+  }
+
+  function parseIcs(text) {
+    const lines = unfoldIcs(text).split(/\r?\n/);
+    const events = [];
+    let current = null;
+
+    for (const line of lines) {
+      if (line === "BEGIN:VEVENT") {
+        current = {};
+        continue;
+      }
+      if (line === "END:VEVENT") {
+        if (current) events.push(current);
+        current = null;
+        continue;
+      }
+      if (!current) continue;
+
+      const idx = line.indexOf(":");
+      if (idx < 0) continue;
+
+      const rawKey = line.slice(0, idx);
+      const value = unescapeIcs(line.slice(idx + 1));
+      const key = rawKey.split(";")[0].toUpperCase();
+
+      if (!current[key]) current[key] = value;
+      else if (Array.isArray(current[key])) current[key].push(value);
+      else current[key] = [current[key], value];
+    }
+    return events;
+  }
+
+  function getCourse(summary, description) {
+    const text = (summary + " " + description).trim();
+
+    // Common course-code patterns: ACCTMIS 4610, CSE 3232, MATH 2366, etc.
+    const match = text.match(/\\b([A-Z]{2,8})[\\s-]?(\\d{4})\\b/i);
+    if (match) return (match[1] + " " + match[2]).toUpperCase();
+
+    // Common Canvas-style separators
+    const parts = summary.split(/\\s+[|:-]\\s+|\\s+[-|]\\s+/);
+    if (parts.length > 1 && parts[0].length < 50) return parts[0].trim();
+
+    return "Other";
+  }
+
+  function looksLikeAssignment(event) {
+    const summary = String(event.SUMMARY || "").toLowerCase();
+    const description = String(event.DESCRIPTION || "").toLowerCase();
+    const text = summary + " " + description;
+
+    const positive = [
+      "assignment", "homework", "hw", "quiz", "exam", "test",
+      "project", "paper", "essay", "lab", "presentation",
+      "discussion", "submission", "due", "midterm", "final",
+      "report", "checkpoint", "milestone", "reading"
+    ];
+
+    const negative = [
+      "lecture", "class", "office hours", "meeting", "holiday",
+      "study session", "appointment", "recitation"
+    ];
+
+    if (negative.some(x => text.includes(x)) && !positive.some(x => text.includes(x))) return false;
+    return positive.some(x => text.includes(x));
+  }
+
+  function normalizeEvent(event) {
+    const title = String(event.SUMMARY || "Untitled Assignment").trim();
+    const description = String(event.DESCRIPTION || "").trim();
+    const due = parseIcsDate(event.DTEND || event.DUE || event.DTSTART);
+
+    return {
+      id: String(event.UID || crypto.randomUUID()),
+      title,
+      course: getCourse(title, description),
+      due: due ? due.toISOString() : null,
+      description,
+      status: "not-started",
+      importedAt: new Date().toISOString()
+    };
+  }
+
+  function formatDate(iso) {
+    if (!iso) return "No due date";
+    const d = new Date(iso);
+    return d.toLocaleString([], {
+      month: "short", day: "numeric", year: "numeric",
+      hour: "numeric", minute: "2-digit"
+    });
+  }
+
+  function dueState(a) {
+    if (!a.due || a.status === "completed") return "normal";
+    const now = Date.now();
+    const due = new Date(a.due).getTime();
+    const diff = due - now;
+    if (diff < 0) return "overdue";
+    if (diff <= 7 * 86400000) return "soon";
+    return "normal";
+  }
+
+  function render() {
+    const search = $("search").value.toLowerCase().trim();
+    const course = $("courseFilter").value;
+    const status = $("statusFilter").value;
+    const dateFilter = $("dateFilter").value;
+
+    const courses = [...new Set(assignments.map(a => a.course || "Other"))].sort();
+    $("courseFilter").innerHTML =
+      '<option value="all">All courses</option>' +
+      courses.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("");
+    $("courseFilter").value = courses.includes(course) ? course : "all";
+
+    const filtered = assignments.filter(a => {
+      const state = dueState(a);
+      const textMatch = !search ||
+        a.title.toLowerCase().includes(search) ||
+        (a.course || "").toLowerCase().includes(search);
+
+      const courseMatch = $("courseFilter").value === "all" || a.course === $("courseFilter").value;
+      const statusMatch = status === "all" || a.status === status;
+
+      let dateMatch = true;
+      if (dateFilter === "upcoming") dateMatch = !!a.due && new Date(a.due) >= new Date();
+      if (dateFilter === "soon") dateMatch = state === "soon";
+      if (dateFilter === "overdue") dateMatch = state === "overdue";
+
+      return textMatch && courseMatch && statusMatch && dateMatch;
+    });
+
+    $("totalCount").textContent = assignments.length;
+    $("soonCount").textContent = assignments.filter(a => dueState(a) === "soon").length;
+    $("overdueCount").textContent = assignments.filter(a => dueState(a) === "overdue").length;
+    $("completedCount").textContent = assignments.filter(a => a.status === "completed").length;
+
+    if (!filtered.length) {
+      $("assignmentContainer").innerHTML =
+        '<div class="empty">No assignments match your filters.</div>';
+      return;
+    }
+
+    const grouped = {};
+    filtered.forEach(a => (grouped[a.course || "Other"] ||= []).push(a));
+
+    $("assignmentContainer").innerHTML = Object.keys(grouped).sort().map(courseName => `
+      <div class="course">
+        <h2>${escapeHtml(courseName)}</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Assignment</th>
+                <th>Due</th>
+                <th>Status</th>
+                <th>Calendar Details</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              ${grouped[courseName].sort((a,b) => new Date(a.due || 8640000000000000) - new Date(b.due || 8640000000000000)).map(a => {
+                const state = dueState(a);
+                const nameClass = a.status === "completed" ? "done" : "";
+                const dateClass = state === "overdue" ? "overdue" : state === "soon" ? "soon" : "";
+                return `
+                  <tr>
+                    <td class="assignment-name ${nameClass}">${escapeHtml(a.title)}</td>
+                    <td class="date ${dateClass}">${escapeHtml(formatDate(a.due))}${state === "overdue" ? " · Overdue" : state === "soon" ? " · Soon" : ""}</td>
+                    <td>
+                      <select onchange="window.updateStatus('${escapeHtml(a.id)}', this.value)">
+                        <option value="not-started" ${a.status==="not-started"?"selected":""}>Not Started</option>
+                        <option value="in-progress" ${a.status==="in-progress"?"selected":""}>In Progress</option>
+                        <option value="completed" ${a.status==="completed"?"selected":""}>Completed</option>
+                      </select>
+                    </td>
+                    <td>${a.description ? `<details><summary>View</summary><div class="help" style="max-width:360px;margin-top:5px;">${escapeHtml(a.description)}</div></details>` : "—"}</td>
+                    <td><button class="small danger" onclick="window.removeAssignment('${escapeHtml(a.id)}')">Remove</button></td>
+                  </tr>`;
+              }).join("")}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `).join("");
+  }
+
+  window.updateStatus = function(id, status) {
+    const item = assignments.find(a => a.id === id);
+    if (item) {
+      item.status = status;
+      saveAssignments();
+      render();
+    }
+  };
+
+  window.removeAssignment = function(id) {
+    assignments = assignments.filter(a => a.id !== id);
+    saveAssignments();
+    render();
+  };
+
+  function showReview(events) {
+    pendingEvents = events;
+    $("reviewList").innerHTML = events.map((e, i) => `
+      <label class="review-item">
+        <input type="checkbox" data-index="${i}" ${looksLikeAssignment(e) ? "checked" : ""}>
+        <div class="review-meta">
+          <strong>${escapeHtml(e.SUMMARY || "Untitled")}</strong>
+          <span>${escapeHtml(getCourse(e.SUMMARY || "", e.DESCRIPTION || ""))} · ${escapeHtml(formatDate(parseIcsDate(e.DTEND || e.DUE || e.DTSTART)?.toISOString()))}</span>
+        </div>
+      </label>
+    `).join("");
+    $("reviewCard").classList.remove("hidden");
+    $("reviewCard").scrollIntoView({behavior:"smooth", block:"start"});
+  }
+
+  $("importSelectedBtn").addEventListener("click", () => {
+    const selected = [...$("reviewList").querySelectorAll("input[type=checkbox]:checked")]
+      .map(x => pendingEvents[Number(x.dataset.index)]);
+
+    const existing = new Set(assignments.map(a => a.id));
+    let added = 0;
+
+    for (const e of selected) {
+      const a = normalizeEvent(e);
+      if (!existing.has(a.id)) {
+        assignments.push(a);
+        added++;
+      }
+    }
+
+    saveAssignments();
+    $("reviewCard").classList.add("hidden");
+    $("message").className = "message success";
+    $("message").textContent = `${added} assignment${added === 1 ? "" : "s"} imported.`;
+    render();
+  });
+
+  $("cancelReviewBtn").addEventListener("click", () => {
+    $("reviewCard").classList.add("hidden");
+    pendingEvents = [];
+  });
+
+  $("syncBtn").addEventListener("click", async () => {
+    const url = $("icsUrl").value.trim();
+    if (!url) {
+      $("message").className = "message error";
+      $("message").textContent = "Paste an ICS calendar URL first.";
+      return;
+    }
+
+    try {
+      new URL(url);
+    } catch {
+      $("message").className = "message error";
+      $("message").textContent = "That does not look like a valid URL.";
+      return;
+    }
+
+    $("syncBtn").disabled = true;
+    $("message").className = "message";
+    $("message").textContent = "Fetching calendar...";
+
+    try {
+      const response = await fetch("/api/calendar?url=" + encodeURIComponent(url), {
+        method: "GET",
+        cache: "no-store"
+      });
+
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const text = await response.text();
+
+      if (!text.includes("BEGIN:VCALENDAR")) {
+        throw new Error("The response does not appear to be an ICS calendar.");
+      }
+
+      const events = parseIcs(text);
+      const candidates = events.filter(e => e.SUMMARY || e.DTSTART);
+
+      localStorage.setItem(URL_KEY, url);
+      $("syncInfo").textContent = `Found ${candidates.length} calendar event${candidates.length === 1 ? "" : "s"} · Last synced ${new Date().toLocaleString()}`;
+      $("message").textContent = "Review the events below before importing them.";
+      showReview(candidates);
+    } catch (err) {
+      $("message").className = "message error";
+      $("message").innerHTML =
+        `Could not fetch the ICS calendar. ${escapeHtml(err.message)}<br>` +
+        `<strong>Most likely cause:</strong> the calendar server blocks browser requests with CORS. ` +
+        `The dashboard itself is working; use the small backend option described in the setup notes.`;
+    } finally {
+      $("syncBtn").disabled = false;
+    }
+  });
+
+  $("clearBtn").addEventListener("click", () => {
+    if (!confirm("Remove all saved assignments and the saved calendar URL?")) return;
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(URL_KEY);
+    assignments = [];
+    $("icsUrl").value = "";
+    $("syncInfo").textContent = "";
+    $("message").textContent = "";
+    render();
+  });
+
+  ["search","courseFilter","statusFilter","dateFilter"].forEach(id =>
+    $(id).addEventListener("input", render)
+  );
+
+  const savedUrl = localStorage.getItem(URL_KEY);
+  if (savedUrl) $("icsUrl").value = savedUrl;
+  render();
+})();
+</script>
+</body>
+</html>
